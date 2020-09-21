@@ -4,20 +4,24 @@ import (
 	"fmt"
 	"github.com/ilhamfs/shopeewebminar/component"
 	"github.com/ilhamfs/shopeewebminar/repository"
+	gocache "github.com/patrickmn/go-cache"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 )
 
 type Module struct {
+	localCache     *gocache.Cache
 	redis          component.Redis
 	userSaveRepo   repository.UserSaveRepo
 	gameConfigRepo repository.GameConfigRepo
 }
 
-func NewHandler(redis component.Redis, userSaveRepo repository.UserSaveRepo, gameConfigRepo repository.GameConfigRepo) *Module {
+func NewHandler(localCache *gocache.Cache, redis component.Redis, userSaveRepo repository.UserSaveRepo, gameConfigRepo repository.GameConfigRepo) *Module {
 	return &Module{
+		localCache:     localCache,
 		redis:          redis,
 		userSaveRepo:   userSaveRepo,
 		gameConfigRepo: gameConfigRepo,
@@ -44,8 +48,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	localCache := gocache.New(5*time.Minute, 10*time.Minute)
 
-	handler := NewHandler(redis, repository.NewUserSaveRepo(db), repository.NewGameConfigRepo(db))
+	handler := NewHandler(localCache, redis, repository.NewUserSaveRepo(db), repository.NewGameConfigRepo(db))
 
 	router := httprouter.New()
 	router.GET("/save/:user_id", handler.GetCharacterSaveFile)
