@@ -11,7 +11,7 @@ type userSaveRepo struct {
 }
 
 type UserSaveRepo interface {
-	Get(userID string) (save *model.UserSave, err error)
+	Get(username string) (save *model.UserSave, err error)
 }
 
 func NewUserSaveRepo(db *sql.DB) UserSaveRepo {
@@ -23,14 +23,14 @@ func NewUserSaveRepo(db *sql.DB) UserSaveRepo {
 func (r *userSaveRepo) getDestDB(save *model.UserSave) []interface{} {
 	return []interface{}{
 		&save.ID,
-		&save.UserID,
+		&save.Username,
 		&save.Save,
 	}
 }
 
-func (r *userSaveRepo) Get(userID string) (config *model.UserSave, err error) {
+func (r *userSaveRepo) Get(username string) (config *model.UserSave, err error) {
 	saves := make([]*model.UserSave, 0)
-	rows, err := r.db.Query("SELECT id, user_id, save FROM user_save WHERE user_id = ?", userID)
+	rows, err := r.db.Query("SELECT id, user_id, save FROM user_save WHERE username = ?", username)
 
 	if err != nil {
 		return

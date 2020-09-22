@@ -2,13 +2,15 @@ package component
 
 import (
 	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+
 	"fmt"
 )
 
 //InitializeDatabase to initialize database
 func InitializeDatabase() (db *sql.DB, err error) {
 
-	db, err = sql.Open("mysql", "")
+	db, err = sql.Open("mysql", "user:password@/dbname")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DB master connection. %+v", err)
 	}

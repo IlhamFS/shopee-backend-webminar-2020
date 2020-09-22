@@ -11,7 +11,7 @@ type gameConfigRepo struct {
 }
 
 type GameConfigRepo interface {
-	Get(configID string) (config *model.GameConfig, err error)
+	Get(gameID string) (config *model.GameConfig, err error)
 }
 
 func NewGameConfigRepo(db *sql.DB) GameConfigRepo {
@@ -23,13 +23,14 @@ func NewGameConfigRepo(db *sql.DB) GameConfigRepo {
 func (r *gameConfigRepo) getDestDB(gameConfig *model.GameConfig) []interface{} {
 	return []interface{}{
 		&gameConfig.ID,
+		&gameConfig.GameID,
 		&gameConfig.Config,
 	}
 }
 
-func (r *gameConfigRepo) Get(configID string) (config *model.GameConfig, err error) {
+func (r *gameConfigRepo) Get(gameID string) (config *model.GameConfig, err error) {
 	configs := make([]*model.GameConfig, 0)
-	rows, err := r.db.Query("SELECT id, config FROM game_config WHERE id = ?", configID)
+	rows, err := r.db.Query("SELECT id, game_id, config FROM game_config WHERE id = ?", gameID)
 
 	if err != nil {
 		return
