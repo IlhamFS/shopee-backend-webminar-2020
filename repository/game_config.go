@@ -30,7 +30,7 @@ func (r *gameConfigRepo) getDestDB(gameConfig *model.GameConfig) []interface{} {
 
 func (r *gameConfigRepo) Get(gameID string) (config *model.GameConfig, err error) {
 	configs := make([]*model.GameConfig, 0)
-	rows, err := r.db.Query("SELECT id, game_id, config FROM game_config WHERE id = ?", gameID)
+	rows, err := r.db.Query("SELECT id, game_id, config FROM game_config WHERE game_id = ?", gameID)
 
 	if err != nil {
 		return
