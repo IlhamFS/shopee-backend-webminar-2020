@@ -20,10 +20,18 @@ type BloomFilter struct {
 var DefaultHashFunctions = []hash.Hash64{murmur3.New64(), fnv.New64(), fnv.New64a()}
 
 // Returns a new BloomFilter object,
-func NewBloomFilter(size uint, hashes []hash.Hash64) *BloomFilter {
+func NewBloomFilter(m uint, hashes []hash.Hash64) *BloomFilter {
+	if hashes == nil || len(hashes) <= 0 {
+		return &BloomFilter{
+			bitset:  make([]bool, m),
+			m:       m,
+			n:       uint(0),
+			hashfns: DefaultHashFunctions,
+		}
+	}
 	return &BloomFilter{
-		bitset:  make([]bool, size),
-		m:       size,
+		bitset:  make([]bool, m),
+		m:       m,
 		n:       uint(0),
 		hashfns: hashes,
 	}

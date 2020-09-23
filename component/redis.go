@@ -9,7 +9,7 @@ type redisCon struct {
 }
 
 type Redis interface {
-	Get(key string) (result interface{}, err error)
+	Get(key string) (result string, err error)
 	Set(key string, value string) (err error)
 }
 
@@ -19,8 +19,8 @@ func NewRedis(redis redis.Conn) Redis {
 	}
 }
 
-func (r *redisCon) Get(key string) (result interface{}, err error) {
-	return r.redis.Do("GET", key)
+func (r *redisCon) Get(key string) (result string, err error) {
+	return redis.String(r.redis.Do("GET", key))
 }
 
 func (r *redisCon) Set(key, value string) (err error) {

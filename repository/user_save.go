@@ -30,7 +30,7 @@ func (r *userSaveRepo) getDestDB(save *model.UserSave) []interface{} {
 
 func (r *userSaveRepo) Get(username string) (config *model.UserSave, err error) {
 	saves := make([]*model.UserSave, 0)
-	rows, err := r.db.Query("SELECT id, user_id, save FROM user_save WHERE username = ?", username)
+	rows, err := r.db.Query("SELECT id, username, save FROM user_save WHERE username = ?", username)
 
 	if err != nil {
 		return
