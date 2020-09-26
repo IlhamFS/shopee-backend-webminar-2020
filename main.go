@@ -14,7 +14,6 @@ import (
 	"hash/fnv"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -39,59 +38,24 @@ func NewHandler(bloomFilter *bloom.BloomFilter, localCache *gocache.Cache, redis
 	}
 }
 
+// Local cache suitable in this API, because this API will be used intensively and using the same data across users
 func (m *Module) GetMapConfig(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	gameID := ps.ByName("game_id")
-	key := fmt.Sprintf("map-config::game-id-%s", gameID)
-	antiStampedeKey := fmt.Sprintf("anti-stampede-map-config::game-id-%s", gameID)
-	attempts := 0
-	defer m.redis.Del(antiStampedeKey)
-	// How many attempts to access the redis until it return fail
-	for attempts < 5 {
-		log.Println("calling local cache")
-		configInterface, found := m.localCache.Get(key)
-		var config string
-		if found {
-			config = configInterface.(string)
-			util.WriteOKResponse(w, config)
-			return
-		}
 
-		log.Println("calling redis")
-		config, err := m.redis.Get(key)
-		if err == nil {
-			m.localCache.Set(key, config, gocache.DefaultExpiration)
-			util.WriteOKResponse(w, config)
-			return
-		}
-
-		err = m.redis.SetNX(antiStampedeKey, strconv.Itoa(1), 30*time.Second)
-		if err != nil {
-			// redis.ErrNX ket already exists, it's being used
-			if err == redis.ErrNX {
-				// Lock is being used
-				// Sleep and try again
-				time.Sleep(2)
-				attempts++
-				continue
-			}
-			util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		log.Println("calling database and using stampede")
-		gameConfigModel, err := m.gameConfigRepo.Get(gameID)
-		if err != nil {
-			util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-		}
-		config = gameConfigModel.Config
-		m.redis.Set(key, config)
-		m.localCache.Set(key, config, gocache.DefaultExpiration)
-		util.WriteOKResponse(w, config)
-		return
+	log.Println("calling database")
+	gameConfigModel, err := m.gameConfigRepo.Get(gameID)
+	if err != nil {
+		util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 	}
-	util.WriteErrorResponse(w, http.StatusInternalServerError, "max attempts to access db reached")
+
+	config := gameConfigModel.Config
+
+	util.WriteOKResponse(w, config)
 	return
+
 }
 
+// If we want to save cache space and load to avoid one time user, use bloom filter
 func (m *Module) GetCharacterSaveFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	username := ps.ByName("username")
 	key := fmt.Sprintf("user-save::username-%s", username)
@@ -110,13 +74,8 @@ func (m *Module) GetCharacterSaveFile(w http.ResponseWriter, r *http.Request, ps
 		util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 	}
 	save = userSaveModel.Save
-	if m.bloomFilter.Test([]byte(key)) {
-		log.Println("not first request, adding to redis", key)
-		m.redis.Set(key, save)
-	} else {
-		log.Println("first request, adding to bloom filter", key)
-		m.bloomFilter.Add([]byte(key))
-	}
+	m.redis.Set(key, save)
+
 	util.WriteOKResponse(w, save)
 	return
 }
