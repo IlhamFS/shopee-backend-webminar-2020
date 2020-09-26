@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/ilhamfs/shopeewebminar/bloom"
-	"github.com/ilhamfs/shopeewebminar/component"
+
+	"github.com/ilhamfs/shopeewebminar/db"
+	"github.com/ilhamfs/shopeewebminar/redis"
 	"github.com/ilhamfs/shopeewebminar/repository"
 	"github.com/ilhamfs/shopeewebminar/util"
 	gocache "github.com/patrickmn/go-cache"
@@ -12,6 +14,7 @@ import (
 	"hash/fnv"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -20,12 +23,12 @@ import (
 type Module struct {
 	bloomFilter    *bloom.BloomFilter
 	localCache     *gocache.Cache
-	redis          component.Redis
+	redis          redis.RedisInterface
 	userSaveRepo   repository.UserSaveRepo
 	gameConfigRepo repository.GameConfigRepo
 }
 
-func NewHandler(bloomFilter *bloom.BloomFilter, localCache *gocache.Cache, redis component.Redis, userSaveRepo repository.UserSaveRepo,
+func NewHandler(bloomFilter *bloom.BloomFilter, localCache *gocache.Cache, redis redis.RedisInterface, userSaveRepo repository.UserSaveRepo,
 	gameConfigRepo repository.GameConfigRepo) *Module {
 	return &Module{
 		bloomFilter:    bloomFilter,
@@ -39,32 +42,53 @@ func NewHandler(bloomFilter *bloom.BloomFilter, localCache *gocache.Cache, redis
 func (m *Module) GetMapConfig(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	gameID := ps.ByName("game_id")
 	key := fmt.Sprintf("map-config::game-id-%s", gameID)
-	log.Println("calling local cache")
-	configInterface, found := m.localCache.Get(key)
-	var config string
-	if found {
-		config = configInterface.(string)
-		util.WriteOKResponse(w, config)
-		return
-	}
+	antiStampedeKey := fmt.Sprintf("anti-stampede-map-config::game-id-%s", gameID)
+	attempts := 0
+	defer m.redis.Del(antiStampedeKey)
+	// How many attempts to access the redis until it return fail
+	for attempts < 5 {
+		log.Println("calling local cache")
+		configInterface, found := m.localCache.Get(key)
+		var config string
+		if found {
+			config = configInterface.(string)
+			util.WriteOKResponse(w, config)
+			return
+		}
 
-	log.Println("calling redis")
-	config, err := m.redis.Get(key)
-	if err == nil {
+		log.Println("calling redis")
+		config, err := m.redis.Get(key)
+		if err == nil {
+			m.localCache.Set(key, config, gocache.DefaultExpiration)
+			util.WriteOKResponse(w, config)
+			return
+		}
+
+		err = m.redis.SetNX(antiStampedeKey, strconv.Itoa(1), 30*time.Second)
+		if err != nil {
+			// redis.ErrNX ket already exists, it's being used
+			if err == redis.ErrNX {
+				// Lock is being used
+				// Sleep and try again
+				time.Sleep(2)
+				attempts++
+				continue
+			}
+			util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		log.Println("calling database and using stampede")
+		gameConfigModel, err := m.gameConfigRepo.Get(gameID)
+		if err != nil {
+			util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
+		}
+		config = gameConfigModel.Config
+		m.redis.Set(key, config)
 		m.localCache.Set(key, config, gocache.DefaultExpiration)
 		util.WriteOKResponse(w, config)
 		return
 	}
-
-	log.Println("calling database")
-	gameConfigModel, err := m.gameConfigRepo.Get(gameID)
-	if err != nil {
-		util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
-	}
-	config = gameConfigModel.Config
-	m.redis.Set(key, config)
-	m.localCache.Set(key, config, gocache.DefaultExpiration)
-	util.WriteOKResponse(w, config)
+	util.WriteErrorResponse(w, http.StatusInternalServerError, "max attempts to access db reached")
 	return
 }
 
@@ -98,13 +122,13 @@ func (m *Module) GetCharacterSaveFile(w http.ResponseWriter, r *http.Request, ps
 }
 
 func main() {
-	redis, err := component.InitializeRedis()
+	redis, err := redis.InitializeRedis()
 
 	if err != nil {
 		panic(err)
 	}
 
-	db, err := component.InitializeDatabase()
+	db, err := db.InitializeDatabase()
 
 	if err != nil {
 		panic(err)

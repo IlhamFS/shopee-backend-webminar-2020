@@ -1,4 +1,4 @@
-package component
+package db
 
 import (
 	"database/sql"
@@ -10,7 +10,7 @@ import (
 //InitializeDatabase to initialize database
 func InitializeDatabase() (db *sql.DB, err error) {
 
-	db, err = sql.Open("mysql", "user:password@/dbname")
+	db, err = sql.Open("mysql", "user:pass@/great_battle")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DB master connection. %+v", err)
 	}
