@@ -74,7 +74,6 @@ func (m *Module) GetCharacterSaveFile(w http.ResponseWriter, r *http.Request, ps
 		util.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 	}
 	save = userSaveModel.Save
-	m.redis.Set(key, save)
 
 	util.WriteOKResponse(w, save)
 	return
