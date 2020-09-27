@@ -121,26 +121,35 @@ func (m *Module) GetCharacterSaveFile(w http.ResponseWriter, r *http.Request, ps
 	return
 }
 
+// Create a web based battle royal
+// We need to create two APIs:
+// 1. Get map config for every user that join the game
+// 2. Get user's save file
+// Assume there's only one map in this game and used by a lot of users (High traffic)
 func main() {
+	// wrapper for redis
 	redis, err := redis.InitializeRedis()
 
 	if err != nil {
 		panic(err)
 	}
-
+	// wrapper for database
 	db, err := db.InitializeDatabase()
 
 	if err != nil {
 		panic(err)
 	}
-
+	// go-cache
 	localCache := gocache.New(5*time.Minute, 10*time.Minute)
 	// k = 3, we are using 3 hash functions
+	// libraries available, redis also have an implementation of bloom filter
 	bloomFilter := bloom.NewBloomFilter(100, []hash.Hash64{murmur3.New64(), fnv.New64(), fnv.New64a()})
 
 	handler := NewHandler(bloomFilter, localCache, redis, repository.NewUserSaveRepo(db), repository.NewGameConfigRepo(db))
 	router := httprouter.New()
-	router.GET("/save/:username", handler.GetCharacterSaveFile)
+	// ex: curl --location --request GET 'http://localhost:8080/character/save/ilhamfs'
+	router.GET("/character/save/:username", handler.GetCharacterSaveFile)
+	// ex: curl --location --request GET 'http://localhost:8080/map/config/the_dust'
 	router.GET("/map/config/:game_id", handler.GetMapConfig)
 
 	log.Fatal(http.ListenAndServe(":8080", router))
